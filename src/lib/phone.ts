@@ -1,4 +1,7 @@
-const DOMAIN = import.meta.env.VITE_PHONE_EMAIL_DOMAIN ?? "wholesale.local";
+// Supabase Auth's email validator rejects `.local` (and other reserved TLDs)
+// as invalid. We use a real-looking TLD here even though no email is ever
+// actually sent — only the format needs to pass.
+const DOMAIN = import.meta.env.VITE_PHONE_EMAIL_DOMAIN ?? "wholesalecredit.app";
 
 /**
  * Strip everything except digits. Customers may enter phones with spaces,

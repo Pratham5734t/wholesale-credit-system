@@ -47,7 +47,7 @@ Open http://localhost:5173.
 4. **Disable email confirmation** so customer accounts work immediately:
    **Authentication → Providers → Email** → turn **Confirm email** OFF.
 5. **Create your owner account.** In **Authentication → Users → Add user → Create new user**:
-   - Email: `<your10digitphone>@wholesale.local`  (e.g. `9876543210@wholesale.local`)
+   - Email: `<your10digitphone>@wholesalecredit.app`  (e.g. `9876543210@wholesalecredit.app`)
    - Password: whatever you want — this is what you'll use to log in
    - **Auto Confirm User: YES**
 6. **Promote your account to owner.** Open `supabase/seed.sql`, replace the phone with yours, and run it in the SQL Editor.
@@ -56,7 +56,7 @@ You can now log into the app at `/login` with **phone = `9876543210`** and your 
 
 ### Why "phone + password" without SMS
 
-Supabase's built-in phone+OTP auth requires an SMS provider (Twilio, MessageBird, etc.) which costs money. We don't need OTP because the owner sets every customer's password manually. Internally we register every account as `<phone>@wholesale.local` in Supabase Auth, but the user only ever types phone + password. Free, fast, and works.
+Supabase's built-in phone+OTP auth requires an SMS provider (Twilio, MessageBird, etc.) which costs money. We don't need OTP because the owner sets every customer's password manually. Internally we register every account as `<phone>@wholesalecredit.app` in Supabase Auth (a real-looking TLD — Supabase's email validator rejects reserved TLDs like `.local`), but the user only ever types phone + password. Free, fast, and works.
 
 ## Setup — Netlify
 
