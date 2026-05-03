@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useCart } from "@/contexts/CartContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCustomerBalance } from "@/queries/balance";
-import { usePlaceOrder } from "@/queries/orders";
+import { usePlaceOrder, CreditLimitExceededError } from "@/queries/orders";
 import { formatINR } from "@/lib/format";
 
 export function CartPage() {
@@ -73,6 +73,14 @@ export function CartPage() {
       toast.success("Order placed! Owner will confirm shortly.");
       navigate("/my-orders");
     } catch (err) {
+      if (err instanceof CreditLimitExceededError) {
+        toast.error(
+          `This order would put you over your credit limit. Clear ${formatINR(
+            err.overage,
+          )} to continue.`,
+        );
+        return;
+      }
       toast.error(err instanceof Error ? err.message : "Failed to place order.");
     }
   };

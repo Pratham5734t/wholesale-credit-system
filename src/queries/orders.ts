@@ -81,47 +81,67 @@ export interface PlaceOrderInput {
   }[];
 }
 
+/**
+ * Place an order via the `place_order` Postgres function. The RPC:
+ *   - validates that the caller is a customer
+ *   - re-looks-up every product's price + active status (server-trusted)
+ *   - enforces the credit limit atomically against the live balance
+ *   - inserts the order row + order_items in the same transaction
+ *
+ * On credit-limit overage the RPC raises an exception of the form
+ * `CREDIT_LIMIT_EXCEEDED:<overage>`; we surface that as a typed error so the
+ * UI can show the friendly toast.
+ */
+export class CreditLimitExceededError extends Error {
+  overage: number;
+  constructor(overage: number) {
+    super(`CREDIT_LIMIT_EXCEEDED:${overage}`);
+    this.name = "CreditLimitExceededError";
+    this.overage = overage;
+  }
+}
+
 export function usePlaceOrder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: PlaceOrderInput): Promise<OrderRow> => {
+    mutationFn: async (input: PlaceOrderInput): Promise<{ id: string }> => {
       if (input.items.length === 0) throw new Error("Cart is empty.");
-      const total = input.items.reduce(
-        (sum, i) => sum + i.price * i.quantity,
-        0,
-      );
-
-      const { data: order, error: orderErr } = await supabase
-        .from("orders")
-        .insert({
-          customer_id: input.customer_id,
-          status: "pending",
-          total,
-          notes: input.notes,
-        })
-        .select("*")
-        .single();
-      if (orderErr) throw orderErr;
 
       const items = input.items.map((i) => ({
-        order_id: order.id,
         product_id: i.product_id,
-        name_snapshot: i.name,
-        price_snapshot: i.price,
+        name: i.name,
+        price: i.price,
         quantity: i.quantity,
-        line_total: i.price * i.quantity,
       }));
 
-      const { error: itemsErr } = await supabase
-        .from("order_items")
-        .insert(items);
-      if (itemsErr) {
-        // best effort cleanup
-        await supabase.from("orders").delete().eq("id", order.id);
-        throw itemsErr;
-      }
+      const { data, error } = await supabase.rpc("place_order", {
+        p_notes: input.notes,
+        p_items: items,
+      });
 
-      return order;
+      if (error) {
+        const msg = error.message ?? "";
+        const overageMatch = msg.match(/CREDIT_LIMIT_EXCEEDED:([\d.]+)/);
+        if (overageMatch) {
+          throw new CreditLimitExceededError(Number(overageMatch[1]));
+        }
+        if (msg.includes("PRODUCT_UNAVAILABLE")) {
+          throw new Error("One of the products in your cart is no longer available.");
+        }
+        if (msg.includes("EMPTY_CART")) {
+          throw new Error("Cart is empty.");
+        }
+        if (msg.includes("INVALID_QUANTITY")) {
+          throw new Error("Invalid quantity in cart.");
+        }
+        if (msg.includes("NOT_A_CUSTOMER")) {
+          throw new Error("Only customer accounts can place orders.");
+        }
+        throw new Error(msg || "Failed to place order.");
+      }
+      if (!data) throw new Error("Failed to place order.");
+
+      return { id: data as string };
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["orders"] });
