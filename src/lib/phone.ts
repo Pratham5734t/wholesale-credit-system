@@ -1,7 +1,10 @@
-// Supabase Auth's email validator rejects `.local` (and other reserved TLDs)
-// as invalid. We use a real-looking TLD here even though no email is ever
-// actually sent — only the format needs to pass.
-const DOMAIN = import.meta.env.VITE_PHONE_EMAIL_DOMAIN ?? "wholesalecredit.app";
+// Supabase Auth's signUp endpoint validates the email's domain via DNS/MX
+// lookup. A made-up domain (e.g. `wholesalecredit.app`) returns NXDOMAIN and
+// Supabase rejects it as "invalid". `example.com` is RFC 2606 reserved
+// (IANA-owned, will never expire) and has a null-MX record — emails are
+// undeliverable by design, which is exactly what we want for synthetic
+// phone-to-email mapping. The customer never sees this address.
+const DOMAIN = import.meta.env.VITE_PHONE_EMAIL_DOMAIN ?? "example.com";
 
 /**
  * Strip everything except digits. Customers may enter phones with spaces,

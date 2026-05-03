@@ -3,7 +3,7 @@
 -- HOW TO USE
 -- ----------
 -- 1) In the Supabase dashboard: Authentication → Users → Add user → Create new user.
---    - Email:    <your10digitphone>@wholesalecredit.app  (e.g. 9876543210@wholesalecredit.app)
+--    - Email:    <your10digitphone>@example.com           (e.g. 9876543210@example.com)
 --    - Password: whatever you want
 --    - Auto Confirm User: YES
 --
@@ -17,7 +17,7 @@ set role = 'owner',
     credit_limit = 0,
     phone = '9876543210'
 where id = (
-  select id from auth.users where email = '9876543210@wholesalecredit.app'
+  select id from auth.users where email = '9876543210@example.com'
 );
 
 -- That's it. Log into the app with phone `9876543210` + your password.
