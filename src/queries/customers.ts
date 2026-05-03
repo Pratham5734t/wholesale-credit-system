@@ -88,6 +88,15 @@ export function useCreateCustomer() {
             : signUpErr.message,
         );
       }
+      // Supabase signUp does NOT throw an error when the email already exists
+      // (so that you can't probe which emails are registered). Instead, it
+      // returns a user object with an empty `identities` array. Detect that
+      // here, otherwise we'd silently overwrite the existing customer's
+      // profile (name/credit_limit/is_active) with the new owner-supplied
+      // values without actually changing the password.
+      if (!signUp.user?.identities?.length) {
+        throw new Error("A customer with this phone already exists.");
+      }
       const userId = signUp.user?.id;
       if (!userId) throw new Error("Failed to create user.");
 
