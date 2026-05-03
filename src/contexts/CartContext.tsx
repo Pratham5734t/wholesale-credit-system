@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { ProductRow } from "@/lib/database.types";
+import { supabase } from "@/lib/supabase";
 
 export interface CartItem {
   product_id: string;
@@ -49,6 +50,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
+
+  // Drop the cart on sign-out so a different user signing in on the same
+  // browser doesn't inherit the previous user's cart items + prices.
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        setItems([]);
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          // ignore quota / private-mode errors
+        }
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   const add = useCallback((product: ProductRow, quantity = 1) => {
     setItems((prev) => {

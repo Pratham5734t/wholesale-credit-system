@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { ProfileRow } from "@/lib/database.types";
 import { phoneToEmail, normalizePhone } from "@/lib/phone";
@@ -45,11 +46,13 @@ export interface CreateCustomerInput {
 /**
  * Create a customer.
  *
- * Steps:
- *  1) Create the auth user with email = phoneToEmail(phone) and the given password.
- *     We use the public signUp endpoint — Supabase will sign the new user in,
- *     so we immediately sign back in as the owner afterwards.
- *  2) Insert (or upsert) the profile row with role='customer', credit_limit, etc.
+ * The signUp call is made on a *separate* Supabase client that does NOT persist
+ * its session, so the owner's auth session on the main client is untouched.
+ * (Calling signUp on the main client would auto-sign-in as the new customer,
+ * fire onAuthStateChange, and bounce the owner out of /admin.)
+ *
+ * Then upsert the profile row with role='customer', credit_limit, etc — this
+ * write goes through the owner's RLS context on the main client.
  *
  * NOTE: For a multi-owner deployment you'd want a server-side function with
  *       the service role key. For a single-owner shop this works fine.
@@ -61,12 +64,17 @@ export function useCreateCustomer() {
       const phone = normalizePhone(input.phone);
       const email = phoneToEmail(phone);
 
-      // Capture the owner's current session so we can restore it.
-      const { data: ownerSession } = await supabase.auth.getSession();
-      const ownerAccessToken = ownerSession.session?.access_token;
-      const ownerRefreshToken = ownerSession.session?.refresh_token;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      const ephemeral = createClient(supabaseUrl, supabaseAnon, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      });
 
-      const { data: signUp, error: signUpErr } = await supabase.auth.signUp({
+      const { data: signUp, error: signUpErr } = await ephemeral.auth.signUp({
         email,
         password: input.password,
         options: {
@@ -82,14 +90,6 @@ export function useCreateCustomer() {
       }
       const userId = signUp.user?.id;
       if (!userId) throw new Error("Failed to create user.");
-
-      // Restore the owner's session.
-      if (ownerAccessToken && ownerRefreshToken) {
-        await supabase.auth.setSession({
-          access_token: ownerAccessToken,
-          refresh_token: ownerRefreshToken,
-        });
-      }
 
       // Upsert profile (a trigger may have inserted a row already).
       const { data, error } = await supabase
