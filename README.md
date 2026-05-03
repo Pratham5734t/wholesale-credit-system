@@ -43,6 +43,7 @@ Open http://localhost:5173.
    - `supabase/migrations/0001_init.sql`
    - `supabase/migrations/0002_rls.sql`
    - `supabase/migrations/0003_storage.sql`
+   - `supabase/migrations/0004_balance_rpc.sql`
 4. **Disable email confirmation** so customer accounts work immediately:
    **Authentication → Providers → Email** → turn **Confirm email** OFF.
 5. **Create your owner account.** In **Authentication → Users → Add user → Create new user**:

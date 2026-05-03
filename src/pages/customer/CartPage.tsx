@@ -24,7 +24,11 @@ export function CartPage() {
   const outstanding = balance.data?.outstanding ?? 0;
   const available = Math.max(0, creditLimit - outstanding);
   const wouldOwe = outstanding + cart.total;
+  // While the balance query is loading we don't know the real outstanding,
+  // so we conservatively block the order to avoid bypassing the credit limit.
+  const balanceUnknown = balance.isLoading || balance.isError;
   const overLimit = wouldOwe > creditLimit;
+  const blockOrder = overLimit || balanceUnknown;
 
   if (cart.items.length === 0) {
     return (
@@ -42,6 +46,10 @@ export function CartPage() {
 
   const onPlaceOrder = async () => {
     if (!profile) return;
+    if (balanceUnknown) {
+      toast.error("Still checking your current balance — try again in a moment.");
+      return;
+    }
     if (overLimit) {
       toast.error(
         `This order would put you over your credit limit. Clear ${formatINR(
@@ -187,11 +195,11 @@ export function CartPage() {
             <Button
               onClick={onPlaceOrder}
               loading={placeOrder.isPending}
-              disabled={overLimit}
+              disabled={blockOrder}
               className="w-full"
               size="lg"
             >
-              Place order
+              {balance.isLoading ? "Checking balance…" : "Place order"}
             </Button>
           </CardBody>
         </Card>

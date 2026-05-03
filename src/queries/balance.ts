@@ -8,35 +8,32 @@ export interface CustomerBalance {
   outstanding: number; // charged - paid
 }
 
-async function fetchBalance(customerId: string): Promise<CustomerBalance> {
-  // Sum confirmed/delivered orders (ignore pending and cancelled).
-  const { data: orderRows, error: orderErr } = await supabase
-    .from("orders")
-    .select("total,status")
-    .eq("customer_id", customerId)
-    .in("status", ["confirmed", "delivered"]);
-  if (orderErr) throw orderErr;
-  const charged = (orderRows ?? []).reduce(
-    (sum, r) => sum + Number(r.total ?? 0),
-    0,
-  );
+interface RpcBalanceRow {
+  customer_id: string;
+  charged: number | string;
+  paid: number | string;
+  outstanding: number | string;
+}
 
-  const { data: payRows, error: payErr } = await supabase
-    .from("payments")
-    .select("amount")
-    .eq("customer_id", customerId);
-  if (payErr) throw payErr;
-  const paid = (payRows ?? []).reduce(
-    (sum, r) => sum + Number(r.amount ?? 0),
-    0,
-  );
-
+function normalizeRow(row: RpcBalanceRow): CustomerBalance {
   return {
-    customer_id: customerId,
-    charged,
-    paid,
-    outstanding: charged - paid,
+    customer_id: row.customer_id,
+    charged: Number(row.charged ?? 0),
+    paid: Number(row.paid ?? 0),
+    outstanding: Number(row.outstanding ?? 0),
   };
+}
+
+async function fetchBalance(customerId: string): Promise<CustomerBalance> {
+  const { data, error } = await supabase.rpc("customer_balance", {
+    p_customer_id: customerId,
+  });
+  if (error) throw error;
+  const rows = (data ?? []) as RpcBalanceRow[];
+  if (rows.length === 0) {
+    return { customer_id: customerId, charged: 0, paid: 0, outstanding: 0 };
+  }
+  return normalizeRow(rows[0]);
 }
 
 export function useCustomerBalance(customerId: string | undefined) {
@@ -55,34 +52,16 @@ export function useAllCustomerBalances(customerIds: string[]) {
     queryKey: ["balance", "many", customerIds.slice().sort().join(",")],
     enabled: customerIds.length > 0,
     queryFn: async (): Promise<Record<string, CustomerBalance>> => {
+      const { data, error } = await supabase.rpc("all_customer_balances");
+      if (error) throw error;
       const result: Record<string, CustomerBalance> = {};
-      // Fetch all relevant rows in two queries, then aggregate client-side.
-      const [orderRes, payRes] = await Promise.all([
-        supabase
-          .from("orders")
-          .select("customer_id,total,status")
-          .in("customer_id", customerIds)
-          .in("status", ["confirmed", "delivered"]),
-        supabase
-          .from("payments")
-          .select("customer_id,amount")
-          .in("customer_id", customerIds),
-      ]);
-      if (orderRes.error) throw orderRes.error;
-      if (payRes.error) throw payRes.error;
       for (const id of customerIds) {
         result[id] = { customer_id: id, charged: 0, paid: 0, outstanding: 0 };
       }
-      for (const row of orderRes.data ?? []) {
-        const b = result[row.customer_id];
-        if (b) b.charged += Number(row.total ?? 0);
-      }
-      for (const row of payRes.data ?? []) {
-        const b = result[row.customer_id];
-        if (b) b.paid += Number(row.amount ?? 0);
-      }
-      for (const id of Object.keys(result)) {
-        result[id].outstanding = result[id].charged - result[id].paid;
+      for (const row of (data ?? []) as RpcBalanceRow[]) {
+        if (row.customer_id in result) {
+          result[row.customer_id] = normalizeRow(row);
+        }
       }
       return result;
     },
